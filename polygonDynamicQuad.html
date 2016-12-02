@@ -1,0 +1,291 @@
+<!DOCTYPE HTML>
+<html>
+	<head>
+		<script type="text/javascript">
+		/*
+			POLYGON SHADER TODOs
+			- max path of 32 points
+			- point count uniform
+			X dynamic quad based on path
+			X relative position of pixels to quad
+			- multiple quads
+			- can perf be improved by limiting resolution?
+			- should resolution in the shader really match resolution of the window? or is there a "world" resolution
+				- hint: yes, but what is the world res
+
+			VEX TODOS
+			- graph paper vectors
+			- flip book vectors
+				- pick animation curve
+				- pause at ends?
+				- ping pong?
+				- etc
+				- shape + color
+				- layers
+				- gradients for shading
+				---> a world of movement
+		*/
+
+			var canvas,gl;
+			var program,positionAttributeLocation,positionBuffer;
+			var resolutionUniformLocation,pathUniformLocation,timeUniformLocation;
+			var startTime;
+			var mouseX = mouseY = 0;
+
+			var pathStart = [0.1,0.1, 0.3,0.5, 0.3,0.8, 0.2,0.75];
+			var pathEnd = [0.4,0.5, 0.7,0.9, 0.6,0.9, 0.5,0.5];
+			//var path = [0.1,0.1, 0.3,0.5, 0.3,0.8, 0.2,0.75];
+			//var path = [-0.1,-0.1, -0.1,0.1, 0.1,0.1, 0.1,-0.1];
+			//var path = [0.3,0.3, 0.4,0.6, 0.8,0.6, 0.6,0.3];
+			//path = [10,10, 30,50, 30,80, 20,75];
+			//var path = [-100.0,-100.0, 100.0,-100.0, 100.0,100.0, 100.0,-100.0];
+			//var path = [-50,0, 70,20, 100,200, 0,100];
+			var path = [-100,-100, 50,-100, 100,100, -50,100];
+
+			function start() {
+				//load webgl canvas
+				canvas = document.getElementById("c");
+				gl = canvas.getContext('experimental-webgl');
+
+	 			if (gl) {
+	 				/* setup */
+	 				//set internal canvas resolution
+	 				gl.canvas.width = 500;
+	 				gl.canvas.height = 500;
+
+	 				//load shader source
+	 				var vertexShaderSource = document.getElementById("vertex").text;
+					var fragmentShaderSource = document.getElementById("fragment").text;
+
+					//compile shader program
+					var vertexShader = createShader(gl, gl.VERTEX_SHADER, vertexShaderSource);
+					var fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fragmentShaderSource);
+					program = createProgram(gl, vertexShader, fragmentShader);
+
+					//get uniform locations
+					resolutionUniformLocation = gl.getUniformLocation(program, "u_resolution");
+					pathUniformLocation = gl.getUniformLocation(program, "u_path");
+					timeUniformLocation = gl.getUniformLocation(program, "u_time");
+
+					//find position attribute in shader program
+					positionAttributeLocation = gl.getAttribLocation(program, "a_position");
+
+					//create and bind an array buffer to hold the positions
+					positionBuffer = gl.createBuffer();
+					gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+
+					//put 2d vertices for a full-canvas quad into the buffer
+					/*
+					var positions = [
+					  -1.0, -1.0,
+					  -1.0, 1.0,
+					  1.0, 1.0,
+					  1.0, 1.0,
+					  -1.0, -1.0,
+					  1.0, -1.0
+					];
+					*/
+					///*
+					var positions = [
+					  0.0, 0.0,
+					  0.0, 1.0,
+					  1.0, 1.0,
+					  1.0, 1.0,
+					  0.0, 0.0,
+					  1.0, 0.0
+					];
+					//*/
+					gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(positions), gl.STATIC_DRAW);
+
+					//set up canvas events
+					canvas.onmousemove = handleMouseMove;
+
+					//start update loop
+					startTime = Date.now();
+					setInterval(update,-1);
+	 			}
+			}
+
+			function createShader(gl, type, source) {
+			  var shader = gl.createShader(type);
+			  gl.shaderSource(shader, source);
+			  gl.compileShader(shader);
+			  var success = gl.getShaderParameter(shader, gl.COMPILE_STATUS);
+			  if (success) {
+			    return shader;
+			  }
+
+			  console.log(gl.getShaderInfoLog(shader));
+			  gl.deleteShader(shader);
+			}
+
+			function createProgram(gl, vertexShader, fragmentShader) {
+			  var program = gl.createProgram();
+			  gl.attachShader(program, vertexShader);
+			  gl.attachShader(program, fragmentShader);
+			  gl.linkProgram(program);
+			  var success = gl.getProgramParameter(program, gl.LINK_STATUS);
+			  if (success) {
+			    return program;
+			  }
+
+			  console.log(gl.getProgramInfoLog(program));
+			  gl.deleteProgram(program);
+			}
+
+			function handleMouseMove(e) {
+				mouseX = e.clientX;
+				mouseY = e.clientY;
+			}
+
+			function lerpPath(pathA, pathB, t) {
+				var pathC = [];
+				for (var i = 0; i < pathA.length; i++) { //path lengths are assumed to be the same
+					pathC.push( pathA[i] + (t*(pathB[i] - pathA[i])) );
+				}
+				return pathC;
+			}
+
+			function update() {
+				/* update */
+				var curTime = ( Date.now() - startTime ) / 1000;
+
+				/* drawing */
+				//set the viewport
+				gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
+
+				//clear the canvas
+				gl.clearColor(0, 0, 0, 0);
+				gl.clear(gl.COLOR_BUFFER_BIT);
+
+				//tell it to use our program (pair of shaders)
+				gl.useProgram(program);
+
+				//set uniforms
+				gl.uniform2fv(resolutionUniformLocation, [canvas.width, canvas.height]);
+				gl.uniform2fv(pathUniformLocation, path);
+				gl.uniform1f(timeUniformLocation, curTime);
+
+				//use the position attribute with the position buffer
+				gl.enableVertexAttribArray(positionAttributeLocation);
+				gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+				var size = 2;
+				var type = gl.FLOAT;
+				var normalize = false;
+				var stride = 0;
+				var offset = 0;
+				gl.vertexAttribPointer(positionAttributeLocation, size, type, normalize, stride, offset);
+
+				//draw the array
+				var primitiveType = gl.TRIANGLES;
+				var offset = 0;
+				var count = 6;
+				gl.drawArrays(primitiveType, offset, count);
+			}
+		</script>
+
+		<script id="vertex" type="shader">
+			#ifdef GL_ES
+			precision mediump float;
+			#endif
+
+			attribute vec4 a_position;
+
+			uniform vec2 u_resolution;
+			uniform vec2 u_path[4];
+			uniform float u_time;
+
+			varying vec2 localPos;
+
+			mat2 rotate2d(float _angle){
+				return mat2(cos(_angle),-sin(_angle),
+							sin(_angle),cos(_angle));
+			}
+
+			vec2 origin = vec2(0,0); //for now origin is always default (0,0)
+			vec2 worldPosition = vec2(0,0);
+			vec2 scale = vec2(1,1);
+			float rotation = 0.0;
+
+			void main() {
+				vec2 minPoint = u_path[0];
+				vec2 maxPoint = u_path[0];
+				for (int i=0;i<4;i++) {
+					minPoint.x = min(minPoint.x, u_path[i].x);
+					maxPoint.x = max(maxPoint.x, u_path[i].x);
+					minPoint.y = min(minPoint.y, u_path[i].y);
+					maxPoint.y = max(maxPoint.y, u_path[i].y);
+				}
+				vec2 size = maxPoint - minPoint;
+				vec2 uv = a_position.xy * size; //is uv the right term?
+				localPos = minPoint + (a_position.xy * uv);
+
+				//tests
+				rotation = sin(u_time) * 3.14159;
+				worldPosition = vec2(100.0 * cos(u_time),0.0);
+				scale = vec2(1.2+sin(u_time*0.3),1.2+sin(u_time*0.3));
+
+				//transformations
+				vec2 screenPos = uv + (minPoint - origin);
+				screenPos = screenPos * scale;
+				screenPos = rotate2d( rotation ) * screenPos;
+				screenPos = screenPos + worldPosition;
+
+				//move into screen space
+				screenPos = screenPos / u_resolution;
+
+				//final position
+				gl_Position = vec4( screenPos, 1.0,1.0 );
+			}
+		</script>
+
+		<script id="fragment" type="shader">
+			#ifdef GL_ES
+			precision mediump float;
+			#endif
+
+			uniform vec2 u_resolution;
+			uniform vec2 u_path[4];
+
+			varying vec2 localPos;
+
+			void main() {
+
+				float crossCount = 0.0;
+
+				vec2 a = u_path[3];
+				for (int i=0;i<4;i++) {
+					vec2 b = u_path[i];
+					vec2 c = localPos;
+
+					float deltaY = (c.y - a.y) / (b.y - a.y);
+					float x = a.x + ((b.x - a.x)*deltaY);
+					float inY = step(0.0,deltaY) - step(1.0,deltaY);
+					float inX = step(x,c.x);
+					float cross = inY * inX;
+
+					crossCount += cross;
+
+					a = b;
+				}
+
+				vec3 color = mod(crossCount,2.0) * vec3(1.0,0.0,0.0);
+
+				gl_FragColor = vec4( color , 1.0);
+
+			}
+		</script>
+
+		<style>
+			#c {
+				width:500px;
+				height:500px;
+				background:black;
+			}
+		</style>
+	</head>
+
+	<body onload="start();">
+		<canvas id="c"></canvas>
+	</body>
+</html>

@@ -1,0 +1,329 @@
+<!DOCTYPE HTML>
+<html>
+	<head>
+		<style>
+			#canvas {
+				image-rendering: -moz-crisp-edges;
+				image-rendering: -webkit-crisp-edges;
+				image-rendering: pixelated;
+				width:512px;
+				height:512px;
+				background:black;
+			}
+		</style>
+		<script>
+			var canvas,context;
+
+			function start() {
+				canvas = document.getElementById("canvas");
+				canvas.width = 128;
+				canvas.height = 128;
+				context = canvas.getContext("2d");
+
+				setInterval(update,-1);
+			}
+
+			function update() {
+				var image = context.createImageData(canvas.width,canvas.height);
+
+				//draw grid circle
+				var tex = context.createImageData(2,2);
+				setPixel(tex, 0,0, 255,255,255,255);
+				setPixel(tex, 1,1, 255,255,255,255);
+				var offset = Math.ceil((Math.sin(Date.now()/1000)*20));
+				var pixels = pixelsInCircle({x:60+offset,y:30+10},20);
+				texturePixels(pixels, tex, sample2x);
+				drawPixels(image, pixels);
+
+				//draw red circle
+				var offset2 = Math.min(0, 40 + Math.ceil((Math.cos(Date.now()/400)*46)) );
+				var c2 = pixelsInCircle({x:50,y:50+offset2},15);
+				fillPixels(c2, new color(255,0,0));
+				drawPixels(image, c2); //replace with texture func?
+
+
+				var poly = pixelsInPoly([{x:10,y:60+10},{x:118,y:60+10},{x:110,y:100+10},{x:18,y:100+10}]);
+				texturePixels( poly, image, createReflectionSampler({x:10,y:60+10},{x:110,y:60+10}) );
+				blendPixels(poly, new color(100,150,255), 0.5);
+				distortPixels(poly, creatSinYDistortion(Date.now()/100,2,6));
+				distortPixels(poly, creatSinXDistortion(Date.now()/300,2,1));
+				drawPixels(image,poly);
+
+				context.putImageData(image,0,0);
+			}
+
+			function color(r=255, g=r, b=r, a=255) {
+				this.r = r;
+				this.g = g;
+				this.b = b;
+				this.a = a;
+			}
+
+			function vector(x=0, y=x) {
+				this.x = x;
+				this.y = y;
+			}
+
+			function pixel(pos={x:0,y:0}, color={r:255,g:255,b:255,a:255}) {
+				this.pos = pos;
+				this.color = color;
+			}
+
+			function setPixel(texture, x, y, r, g, b, a) {
+				var i = (y * texture.width * 4) + (x * 4);
+				texture.data[i+0] = r;
+				texture.data[i+1] = g;
+				texture.data[i+2] = b;
+				texture.data[i+3] = a;
+				return texture;
+			}
+
+			function getPixel(texture, x, y) {
+				var i = (y * texture.width * 4) + (x * 4);
+				return new color(texture.data[i+0], texture.data[i+1], texture.data[i+2], texture.data[i+3]);
+			}
+
+			function creatSinXDistortion(t,height,period) {
+				return function(pos) {
+					pos.x = Math.floor(pos.x + height*Math.sin((t + pos.y)/period));
+					pos.y = pos.y;
+					return pos;
+				}
+			}
+
+			function creatSinYDistortion(t,height,period) {
+				return function(pos) {
+					pos.y = Math.floor(pos.y + height*Math.sin((t + pos.x)/period));
+					pos.x = pos.x;
+					return pos;
+				}
+			}
+
+			function distortPixels(pixels, distortionFunction) {
+				for (i in pixels) {
+					var p = pixels[i];
+					p.pos = distortionFunction(p.pos);
+				}
+				return pixels;
+			}
+
+			function rectangleBounds(poly) {
+				var topLeft = {
+					x: poly[0].x,
+					y: poly[0].y
+				};
+				var bottomRight = {
+					x: poly[0].x,
+					y: poly[0].y
+				};
+				for (i in poly) {
+					var p = poly[i];
+					if (p.x < topLeft.x) topLeft.x = p.x;
+					if (p.x > bottomRight.x) bottomRight.x = p.x;
+					if (p.y < topLeft.y) topLeft.y = p.y;
+					if (p.y > bottomRight.y) bottomRight.y = p.y;
+				}
+				return {
+					x: topLeft.x, y: topLeft.y,
+					w: bottomRight.x - topLeft.x, h: bottomRight.y - topLeft.y
+				};
+			}
+
+			function drawPoly(texture, poly) {
+				var bounds = rectangleBounds(poly);
+				for (var x = bounds.x; x < (bounds.x + bounds.w); x++) {
+					for (var y = bounds.y; y < (bounds.y + bounds.h); y++) {
+						var p = {x:x,y:y};
+						if ( isPointInPoly(p, poly) ) {
+							setPixel(texture, x, y, 255,255,255,255);
+						}
+					}
+				}
+			}
+
+			function drawPixels(texture, pixels) {
+				for (i in pixels) {
+					drawPixel(texture, pixels[i]);
+				}
+			}
+
+			function drawPixel(texture, pixel) {
+				setPixel(texture, pixel.pos.x, pixel.pos.y, pixel.color.r, pixel.color.g, pixel.color.b, pixel.color.a);
+			}
+
+			function sample(texture, x, y) {
+				var texX = x % texture.width;
+				var texY = y % texture.height;
+				return getPixel(texture, texX,texY);
+			}
+
+			function sample2x(texture, x, y) {
+				var texX = Math.ceil(x/2) % texture.width;
+				var texY = Math.ceil(y/2) % texture.height;
+				return getPixel(texture, texX,texY);
+			}
+
+			function createReflectionSampler(l0, l1) {
+				return function(texture, x, y) {
+					var p = new vector(x,y);
+					var r = reflectAcross(p,l0,l1);
+					return getPixel(texture, r.x, r.y);
+				};
+			}
+
+			function texturePixels(pixels, texture, sampleFunction=sample) {
+				for (i in pixels) {
+					var p = pixels[i];
+					p.color = sampleFunction(texture, p.pos.x, p.pos.y);
+				}
+				return pixels;
+			}
+
+
+			function fillPixels(pixels, color) {
+				for (i in pixels) {
+					pixels[i].color = color;
+				}
+				return pixels;
+			}
+
+			function blendPixels(pixels, color, t) {
+				for (i in pixels) {
+					pixels[i].color = lerpRGBA(pixels[i].color, color, t);
+				}
+				return pixels;
+			}
+
+			function lerpRGBA(c0, c1, t) {
+				return {
+					r: c0.r + ((c1.r - c0.r) * t),
+					g: c0.g + ((c1.g - c0.g) * t),
+					b: c0.b + ((c1.b - c0.b) * t),
+					a: c0.a + ((c1.a - c0.a) * t)
+				};
+			}
+
+			function pixelsInCircle(c,r) {
+				var pixels = [];
+				var bounds = {
+					x:c.x-r, y:c.y-r,
+					w:r*2, h:r*2
+				};
+				for (var x = bounds.x; x < (bounds.x + bounds.w); x++) {
+					for (var y = bounds.y; y < (bounds.y + bounds.h); y++) {
+						var p = {x:x,y:y};
+						if (isPointInCircle(p,c,r)) {
+							pixels.push( new pixel(p) );
+						}
+					}
+				}
+				return pixels;
+			}
+
+			function isPointInCircle(p, c, r) {
+				var dist = magnitude( sub(c,p) );
+				return (dist <= r);
+			}
+
+			function pixelsInPoly(poly) {
+				var pixels = [];
+				var bounds = rectangleBounds(poly);
+				for (var x = bounds.x; x < (bounds.x + bounds.w); x++) {
+					for (var y = bounds.y; y < (bounds.y + bounds.h); y++) {
+						var p = {x:x,y:y};
+						if ( isPointInPoly(p, poly) ) {
+							pixels.push( new pixel(p) );
+						}
+					}
+				}
+				return pixels;
+			}
+
+			// even/odd formula
+			function isPointInPoly(p, poly) {
+				var crossings = 0;
+				var p0 = poly[poly.length-1];
+				for (var i = 0; i < poly.length; i++) {
+					var p1 = poly[i];
+					var pNudged = {x:p.x, y:p.y+0.1}; // nudging the ray origin a bit avoids double counting vertices
+					if ( rayIntersectsLine( pNudged, {x:1,y:0}, p0, p1 ) )
+						crossings++;
+					p0 = p1;
+				}
+				return ( crossings % 2 ) == 1;
+			}
+
+			function dot(p0, p1) {
+				return (p0.x * p1.x) + (p0.y * p1.y);
+			}
+
+			function cross(p0, p1) {
+				return (p0.x * p1.y) - (p0.y * p1.x);
+			}
+
+			function sub(p0, p1) {
+				return {
+					x: p0.x - p1.x,
+					y: p0.y - p1.y
+				};
+			}
+
+			function add(p0, p1) {
+				return {
+					x: p0.x + p1.x,
+					y: p0.y + p1.y
+				};
+			}
+
+			function mult(v, s) {
+				return new vector( v.x*s, v.y*s );
+			}
+
+			function magnitude(v) {
+				return Math.sqrt( Math.pow(v.x,2) + Math.pow(v.y,2) );
+			}
+
+			function normalize(v) {
+				var m = magnitude(v);
+				return new vector(v.x/m, v.y/m);
+			}
+
+			//wish I understood the intuition here better
+			function rayIntersectsLine(p, r, l0, l1) {
+				var q = l0;
+				var s = sub(l1,l0);
+
+				if ( cross(r,s) == 0 ) return false;
+
+				var t = cross( sub(q,p), s ) / cross( r, s );
+				var u = cross( sub(q,p), r ) / cross( r, s );
+
+				return ( t >= 0 && u >= 0 && u <= 1 );
+			}
+
+			function project(v0, v1) {
+				var n = normalize( v1 );
+				var d = dot( v0, n );
+				return mult( n, d );
+			}
+
+			function closestPointOnLine(p, l0, l1) {
+				var toPoint = sub( p, l0 );
+				var alongLine = sub( l1, l0 );
+				return add( l0, project( toPoint, alongLine ) );
+			}
+
+			function reflectAcross(p, l0, l1) {
+				var c = closestPointOnLine(p, l0, l1);
+				var cToP = sub(p,c);
+				var reflectVector = mult(cToP,-1);
+				var r = add(c,reflectVector);
+				return r;
+			}
+
+		</script>
+	</head>
+	<body onload="start();">
+		<canvas id="canvas"></canvas>
+	</body>
+</html>
