@@ -111,11 +111,14 @@
 			var vertexSymbols = "0123456789abcdefghijklmnopqrstuvwxyz";
 			var treePath;
 			function loadFigures() {
-				var str = document.getElementById("tree").text;
+				treePath = figure( document.getElementById("tree").text );
+			}
+
+			function figure(str) {
 				var lines = str.split("\n");
 				lines.splice(0,1);
 				lines.splice(lines.length-1,1);
-				console.log(lines);
+				//console.log(lines);
 				var points = [];
 				for (var y = 0; y < lines.length; y++) {
 					var row = lines[y];
@@ -128,17 +131,17 @@
 						}
 					}
 				}
-				console.log(points);
+				//console.log(points);
 				points.sort(function(a,b){return a.i-b.i;});
-				console.log(points);
+				//console.log(points);
 				var path = [];
 				var multiplier = 10;
 				for (var i = 0; i < points.length; i++) {
 					path.push(points[i].x * multiplier);
 					path.push(points[i].y * -multiplier);
 				}
-				console.log(path);
-				treePath = path;
+				//console.log(path);
+				return path;				
 			}
 
 			function createShader(gl, type, source) {
@@ -441,6 +444,10 @@
 ............
 ............
 ....0.e.....
+</script>
+
+<script id="pond" type="figure">
+//TODO
 </script>
 
 		<style>
