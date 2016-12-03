@@ -4,11 +4,11 @@
 		<script type="text/javascript">
 		/*
 			POLYGON SHADER TODOs
-			- max path of 32 points
-			- point count uniform
+			X max path of 32 points
+			X point count uniform
 			X dynamic quad based on path
 			X relative position of pixels to quad
-			- multiple quads
+			X multiple quads
 			- can perf be improved by limiting resolution?
 			- should resolution in the shader really match resolution of the window? or is there a "world" resolution
 				- hint: yes, but what is the world res
@@ -27,20 +27,22 @@
 		*/
 
 			var canvas,gl;
-			var program,positionAttributeLocation,positionBuffer;
-			var resolutionUniformLocation,pathUniformLocation,timeUniformLocation;
+
+			//poly program
+			var program;
+			var positionAttributeLocation,positionBuffer;
+			var resolutionUniformLocation;
+			var pathUniformLocation,pathLengthUniformLocation;
+			var colorUniformLocation;
+			var originUniformLocation, positionUniformLocation, scaleUniformLocation, rotationUniformLocation;
+
 			var startTime;
 			var mouseX = mouseY = 0;
 
-			var pathStart = [0.1,0.1, 0.3,0.5, 0.3,0.8, 0.2,0.75];
-			var pathEnd = [0.4,0.5, 0.7,0.9, 0.6,0.9, 0.5,0.5];
-			//var path = [0.1,0.1, 0.3,0.5, 0.3,0.8, 0.2,0.75];
-			//var path = [-0.1,-0.1, -0.1,0.1, 0.1,0.1, 0.1,-0.1];
-			//var path = [0.3,0.3, 0.4,0.6, 0.8,0.6, 0.6,0.3];
-			//path = [10,10, 30,50, 30,80, 20,75];
-			//var path = [-100.0,-100.0, 100.0,-100.0, 100.0,100.0, 100.0,-100.0];
-			//var path = [-50,0, 70,20, 100,200, 0,100];
-			var path = [-100,-100, 50,-100, 100,100, -50,100];
+			var pathStart = [-100,-100, 50,-100, 100,100, -50,100, -30,-20];
+			var pathEnd = [-100,-50, 50,-100, 50,20, -50,50, -120,-20];
+			var path;
+			var path2 = [-100,-100, 50,-100, 100,100, -50,100];
 
 			function start() {
 				//load webgl canvas
@@ -65,7 +67,12 @@
 					//get uniform locations
 					resolutionUniformLocation = gl.getUniformLocation(program, "u_resolution");
 					pathUniformLocation = gl.getUniformLocation(program, "u_path");
-					timeUniformLocation = gl.getUniformLocation(program, "u_time");
+					pathLengthUniformLocation = gl.getUniformLocation(program, "u_pathLength");
+					originUniformLocation = gl.getUniformLocation(program, "u_origin");
+					positionUniformLocation = gl.getUniformLocation(program, "u_position");
+					scaleUniformLocation = gl.getUniformLocation(program, "u_scale");
+					rotationUniformLocation = gl.getUniformLocation(program, "u_rotation");
+					colorUniformLocation = gl.getUniformLocation(program, "u_color");
 
 					//find position attribute in shader program
 					positionAttributeLocation = gl.getAttribLocation(program, "a_position");
@@ -75,17 +82,6 @@
 					gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
 
 					//put 2d vertices for a full-canvas quad into the buffer
-					/*
-					var positions = [
-					  -1.0, -1.0,
-					  -1.0, 1.0,
-					  1.0, 1.0,
-					  1.0, 1.0,
-					  -1.0, -1.0,
-					  1.0, -1.0
-					];
-					*/
-					///*
 					var positions = [
 					  0.0, 0.0,
 					  0.0, 1.0,
@@ -94,8 +90,11 @@
 					  0.0, 0.0,
 					  1.0, 0.0
 					];
-					//*/
 					gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(positions), gl.STATIC_DRAW);
+
+					//blending
+					gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+					gl.enable(gl.BLEND);
 
 					//set up canvas events
 					canvas.onmousemove = handleMouseMove;
@@ -149,6 +148,7 @@
 			function update() {
 				/* update */
 				var curTime = ( Date.now() - startTime ) / 1000;
+				path = lerpPath(pathStart, pathEnd, Math.abs(Math.sin(curTime)));
 
 				/* drawing */
 				//set the viewport
@@ -161,10 +161,8 @@
 				//tell it to use our program (pair of shaders)
 				gl.useProgram(program);
 
-				//set uniforms
+				//set shared uniforms
 				gl.uniform2fv(resolutionUniformLocation, [canvas.width, canvas.height]);
-				gl.uniform2fv(pathUniformLocation, path);
-				gl.uniform1f(timeUniformLocation, curTime);
 
 				//use the position attribute with the position buffer
 				gl.enableVertexAttribArray(positionAttributeLocation);
@@ -176,7 +174,36 @@
 				var offset = 0;
 				gl.vertexAttribPointer(positionAttributeLocation, size, type, normalize, stride, offset);
 
-				//draw the array
+				//draw the polygons
+				drawPolygon({
+					path: path,
+					origin: [0,0],
+					pos: [100.0 * Math.cos(curTime),0],
+					scale: [1,1],
+					rot: Math.sin(curTime) * 3.14159,
+					color: [1.0,0.0,0.0,1.0]
+				});
+
+				drawPolygon({
+					path: path2,
+					origin: [0,0],
+					pos: [200,100],
+					scale: [1,1],
+					rot: 0,
+					color: [0.0,1.0,0.0,1.0]
+				});
+			}
+
+			function drawPolygon(poly) {
+				//set uniforms
+				gl.uniform2fv(pathUniformLocation, poly.path);
+				gl.uniform1i(pathLengthUniformLocation, (poly.path.length/2));
+				gl.uniform2fv(originUniformLocation, poly.origin);
+				gl.uniform2fv(positionUniformLocation, poly.pos);
+				gl.uniform2fv(scaleUniformLocation, poly.scale);
+				gl.uniform1f(rotationUniformLocation, poly.rot);
+				gl.uniform4fv(colorUniformLocation, poly.color);
+				//draw array as triangles
 				var primitiveType = gl.TRIANGLES;
 				var offset = 0;
 				var count = 6;
@@ -187,13 +214,20 @@
 		<script id="vertex" type="shader">
 			#ifdef GL_ES
 			precision mediump float;
+			precision highp int;
 			#endif
 
 			attribute vec4 a_position;
 
 			uniform vec2 u_resolution;
-			uniform vec2 u_path[4];
-			uniform float u_time;
+
+			uniform vec2 u_path[32];
+			uniform int u_pathLength;
+
+			uniform vec2 u_origin;
+			uniform vec2 u_position;
+			uniform vec2 u_scale;
+			uniform float u_rotation;
 
 			varying vec2 localPos;
 
@@ -202,15 +236,14 @@
 							sin(_angle),cos(_angle));
 			}
 
-			vec2 origin = vec2(0,0); //for now origin is always default (0,0)
-			vec2 worldPosition = vec2(0,0);
-			vec2 scale = vec2(1,1);
-			float rotation = 0.0;
-
 			void main() {
+				//calculate quad bounds and vertex local position
 				vec2 minPoint = u_path[0];
 				vec2 maxPoint = u_path[0];
-				for (int i=0;i<4;i++) {
+				for (int i=0;i<32;i++) {
+
+					if (i >= u_pathLength) break; //this is hacky; something that generates shaders might be better?
+
 					minPoint.x = min(minPoint.x, u_path[i].x);
 					maxPoint.x = max(maxPoint.x, u_path[i].x);
 					minPoint.y = min(minPoint.y, u_path[i].y);
@@ -220,16 +253,11 @@
 				vec2 uv = a_position.xy * size; //is uv the right term?
 				localPos = minPoint + (a_position.xy * uv);
 
-				//tests
-				rotation = sin(u_time) * 3.14159;
-				worldPosition = vec2(100.0 * cos(u_time),0.0);
-				scale = vec2(1.2+sin(u_time*0.3),1.2+sin(u_time*0.3));
-
 				//transformations
-				vec2 screenPos = uv + (minPoint - origin);
-				screenPos = screenPos * scale;
-				screenPos = rotate2d( rotation ) * screenPos;
-				screenPos = screenPos + worldPosition;
+				vec2 screenPos = uv + (minPoint - u_origin);
+				screenPos = screenPos * u_scale;
+				screenPos = rotate2d( u_rotation ) * screenPos;
+				screenPos = screenPos + u_position;
 
 				//move into screen space
 				screenPos = screenPos / u_resolution;
@@ -242,10 +270,12 @@
 		<script id="fragment" type="shader">
 			#ifdef GL_ES
 			precision mediump float;
+			precision highp int;
 			#endif
 
-			uniform vec2 u_resolution;
-			uniform vec2 u_path[4];
+			uniform vec2 u_path[32];
+			uniform int u_pathLength;
+			uniform vec4 u_color;
 
 			varying vec2 localPos;
 
@@ -253,9 +283,15 @@
 
 				float crossCount = 0.0;
 
-				vec2 a = u_path[3];
-				for (int i=0;i<4;i++) {
+				vec2 a = u_path[0];
+				for (int i=1;i<32;i++) {
+
+					if (i > u_pathLength) break;
+
 					vec2 b = u_path[i];
+					if (i == u_pathLength) {
+						b = u_path[0]; //I have to go to contortions to allow different size polygons :(
+					}
 					vec2 c = localPos;
 
 					float deltaY = (c.y - a.y) / (b.y - a.y);
@@ -269,9 +305,10 @@
 					a = b;
 				}
 
-				vec3 color = mod(crossCount,2.0) * vec3(1.0,0.0,0.0);
+				float inPoly = mod(crossCount,2.0); 
+				vec4 color = inPoly * u_color;
 
-				gl_FragColor = vec4( color , 1.0);
+				gl_FragColor = color;
 
 			}
 		</script>
