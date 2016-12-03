@@ -36,6 +36,15 @@
 			var colorUniformLocation;
 			var originUniformLocation, positionUniformLocation, scaleUniformLocation, rotationUniformLocation;
 
+			//reflection program
+			var reflectionProgram;
+			var u_reflectionResolution;
+			var u_reflectionPath, u_reflectionPathLength;
+			var u_reflectionOrigin, u_reflectionPosition, u_reflectionScale, u_reflectionRotation;
+			var u_reflectionColor;
+			var u_reflectionTime;
+			var a_reflectionPosition, buf_reflectionPosition;
+
 			var startTime;
 			var mouseX = mouseY = 0;
 
@@ -55,13 +64,20 @@
 	 				gl.canvas.width = 500;
 	 				gl.canvas.height = 500;
 
+
+
 	 				//load shader source
 	 				var vertexShaderSource = document.getElementById("vertex").text;
 					var fragmentShaderSource = document.getElementById("fragment").text;
+					var reflectionFragShaderSource = document.getElementById("reflectionFrag").text;
 
-					//compile shader program
 					var vertexShader = createShader(gl, gl.VERTEX_SHADER, vertexShaderSource);
 					var fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fragmentShaderSource);
+					var reflectionFragShader = createShader(gl, gl.FRAGMENT_SHADER, reflectionFragShaderSource);
+
+
+
+					//compile shader program
 					program = createProgram(gl, vertexShader, fragmentShader);
 
 					//get uniform locations
@@ -91,6 +107,52 @@
 					  1.0, 0.0
 					];
 					gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(positions), gl.STATIC_DRAW);
+
+
+
+					//compile reflection program
+					reflectionProgram = createProgram(gl, vertexShader, reflectionFragShader);
+
+					//get uniform locations
+					u_reflectionResolution = gl.getUniformLocation(reflectionProgram, "u_resolution");
+					u_reflectionPath = gl.getUniformLocation(reflectionProgram, "u_path");
+					u_reflectionPathLength = gl.getUniformLocation(reflectionProgram, "u_pathLength");
+					u_reflectionOrigin = gl.getUniformLocation(reflectionProgram, "u_origin");
+					u_reflectionPosition = gl.getUniformLocation(reflectionProgram, "u_position");
+					u_reflectionScale = gl.getUniformLocation(reflectionProgram, "u_scale");
+					u_reflectionRotation = gl.getUniformLocation(reflectionProgram, "u_rotation");
+					u_reflectionColor = gl.getUniformLocation(reflectionProgram, "u_color");
+					u_reflectionTime = gl.getUniformLocation(reflectionProgram, "u_time");
+
+					//find position attribute in shader program
+					a_reflectionPosition = gl.getAttribLocation(reflectionProgram, "a_position");
+
+					//create and bind an array buffer to hold the positions
+					buf_reflectionPosition = gl.createBuffer();
+					gl.bindBuffer(gl.ARRAY_BUFFER, buf_reflectionPosition);
+
+					//put 2d vertices for a full-canvas quad into the buffer
+					var positions = [
+					  0.0, 0.0,
+					  0.0, 1.0,
+					  1.0, 1.0,
+					  1.0, 1.0,
+					  0.0, 0.0,
+					  1.0, 0.0
+					];
+					gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(positions), gl.STATIC_DRAW);
+
+					// Create a texture. // todo move this into update?
+					var texture = gl.createTexture();
+					gl.bindTexture(gl.TEXTURE_2D, texture);
+
+					// Set the parameters so we can render any size image.
+					gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+					gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+					gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+					gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+
+
 
 					//blending
 					gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
@@ -208,22 +270,7 @@
 				gl.clearColor(0.2,0.2,0.4,1.0);
 				gl.clear(gl.COLOR_BUFFER_BIT);
 
-				//tell it to use our program (pair of shaders)
-				gl.useProgram(program);
-
-				//set shared uniforms
-				gl.uniform2fv(resolutionUniformLocation, [canvas.width, canvas.height]);
-
-				//use the position attribute with the position buffer
-				gl.enableVertexAttribArray(positionAttributeLocation);
-				gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
-				var size = 2;
-				var type = gl.FLOAT;
-				var normalize = false;
-				var stride = 0;
-				var offset = 0;
-				gl.vertexAttribPointer(positionAttributeLocation, size, type, normalize, stride, offset);
-
+				setupPolygonShader();
 
 				/* draw scene */
 				//var treeColor = [0.6,0.8,0.3,1.0, 0.2,0.6,0.4,1.0];
@@ -255,7 +302,7 @@
 				});
 				drawPolygon({
 					path: swayingTree(curTime,-140),
-					pos: [-140,450],
+					pos: [-140,400],
 					origin: [0,0],
 					scale: [1,1],
 					rot: 0,
@@ -344,16 +391,18 @@
 				});
 
 				//pond
-				drawPolygon({
+				setupReflectionShader(curTime);
+				drawReflectionPoly({
 					path: pondPath,
 					origin: [0,0],
-					pos: [-350,40],
-					scale: [3,3],
+					pos: [-350,60],
+					scale: [3,3.6],
 					rot: 0,
 					color: [0.2,0.6,1.0,1.0, 0.2,0.6,1.0,1.0] //no gradient
 				});
 
 				//bottom trees
+				setupPolygonShader();
 				//left side
 				drawPolygon({
 					path: swayingTree(curTime,-520),
@@ -407,7 +456,7 @@
 				});
 				drawPolygon({
 					path: swayingTree(curTime,-140),
-					pos: [-140,-250],
+					pos: [-180,-250],
 					origin: [0,0],
 					scale: [1,1],
 					rot: 0,
@@ -445,6 +494,63 @@
 					rot: 0,
 					color: treeColor
 				});
+			}
+
+			function setupReflectionShader(curTime) {
+				//grab texture from canvas
+				gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, canvas);
+
+				//tell it to use our program (pair of shaders)
+				gl.useProgram(reflectionProgram);
+
+				//set shared uniforms
+				gl.uniform2fv(u_reflectionResolution, [canvas.width, canvas.height]);
+				gl.uniform1f(u_reflectionTime, curTime);
+
+				//use the position attribute with the position buffer
+				gl.enableVertexAttribArray(a_reflectionPosition);
+				gl.bindBuffer(gl.ARRAY_BUFFER, buf_reflectionPosition);
+				var size = 2;
+				var type = gl.FLOAT;
+				var normalize = false;
+				var stride = 0;
+				var offset = 0;
+				gl.vertexAttribPointer(a_reflectionPosition, size, type, normalize, stride, offset);
+			}
+
+			function drawReflectionPoly(poly) {
+				//set uniforms
+				gl.uniform2fv(u_reflectionPath, poly.path);
+				gl.uniform1i(u_reflectionPathLength, (poly.path.length/2));
+				gl.uniform2fv(u_reflectionOrigin, poly.origin);
+				gl.uniform2fv(u_reflectionPosition, poly.pos);
+				gl.uniform2fv(u_reflectionScale, poly.scale);
+				gl.uniform1f(u_reflectionRotation, poly.rot);
+				gl.uniform4fv(u_reflectionColor, poly.color);
+				
+				//draw array as triangles
+				var primitiveType = gl.TRIANGLES;
+				var offset = 0;
+				var count = 6;
+				gl.drawArrays(primitiveType, offset, count);
+			}
+
+			function setupPolygonShader() {
+				//tell it to use our program (pair of shaders)
+				gl.useProgram(program);
+
+				//set shared uniforms
+				gl.uniform2fv(resolutionUniformLocation, [canvas.width, canvas.height]);
+
+				//use the position attribute with the position buffer
+				gl.enableVertexAttribArray(positionAttributeLocation);
+				gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+				var size = 2;
+				var type = gl.FLOAT;
+				var normalize = false;
+				var stride = 0;
+				var offset = 0;
+				gl.vertexAttribPointer(positionAttributeLocation, size, type, normalize, stride, offset);
 			}
 
 			function drawPolygon(poly) {
@@ -559,9 +665,68 @@
 				}
 
 				float inPoly = mod(crossCount,2.0); 
-				vec4 color = inPoly * (u_color[0] + (u_color[1]-u_color[0])*(localPos.y/-200.0));//(u_color + ( (vec4(0.0,0.0,0.0,1.0)-u_color)*(localPos.y/50.0) ));
+				vec4 color = inPoly * (u_color[0] + (u_color[1]-u_color[0])*(localPos.y/-200.0)); //todo make relative to bounding box
 
 				gl_FragColor = color;
+
+			}
+		</script>
+
+		<script id="reflectionFrag" type="shader">
+			#ifdef GL_ES
+			precision mediump float;
+			precision highp int;
+			#endif
+
+			uniform sampler2D u_image;
+			uniform vec2 u_resolution;
+
+			uniform vec2 u_path[32];
+			uniform int u_pathLength;
+			uniform vec4 u_color[2];
+
+			uniform float u_time;
+
+			varying vec2 localPos;
+
+			void main() {
+
+				float crossCount = 0.0;
+
+				float yOff = localPos.y + u_time*2.0;
+				float xOff = localPos.x + u_time*5.0;
+
+				vec2 a = u_path[0];
+				for (int i=1;i<32;i++) {
+
+					if (i > u_pathLength) break;
+
+					vec2 b = u_path[i];
+					if (i == u_pathLength) {
+						b = u_path[0]; //I have to go to contortions to allow different size polygons :(
+					}
+					vec2 c = localPos + vec2( 0.0, 2.0 * sin(xOff*0.1) * max(0.0,1.0-(-1.0*localPos.y/100.0)) );
+
+					float deltaY = (c.y - a.y) / (b.y - a.y);
+					float x = a.x + ((b.x - a.x)*deltaY);
+					float inY = step(0.0,deltaY) - step(1.0,deltaY);
+					float inX = step(x,c.x);
+					float cross = inY * inX;
+
+					crossCount += cross;
+
+					a = b;
+				}
+
+				float inPoly = mod(crossCount,2.0); 
+				vec4 color = inPoly * (u_color[0] + (u_color[1]-u_color[0])*(localPos.y/-200.0)); //todo make relative to bounding box
+
+				float blend = 0.2 + 0.8*(localPos.y/-120.0);
+
+				vec2 screenSpaceCoord = ( ( gl_FragCoord.xy+vec2(5.0*sin(yOff*0.3)*cos(yOff*1.2),2.0*sin(xOff*0.1)) ) / u_resolution);
+
+				vec2 texCoord = (screenSpaceCoord - vec2(0.0,0.02)) * vec2(1.0,0.8);
+				gl_FragColor = (color * blend) + (texture2D(u_image, texCoord) * (1.0-blend)) * inPoly;
 
 			}
 		</script>
@@ -615,7 +780,7 @@
 </script>
 
 <script id="pond" type="figure">
-..3..................4..
+3......................4
 2......................5
 ........................
 ........................
