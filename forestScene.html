@@ -109,9 +109,10 @@
 			}
 
 			var vertexSymbols = "0123456789abcdefghijklmnopqrstuvwxyz";
-			var treePath;
+			var treePath, pondPath;
 			function loadFigures() {
 				treePath = figure( document.getElementById("tree").text );
+				pondPath = figure( document.getElementById("pond").text );
 			}
 
 			function figure(str) {
@@ -194,7 +195,8 @@
 				gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
 
 				//clear the canvas
-				gl.clearColor(0, 0, 0, 0);
+				//gl.clearColor(0.2, 0.2, 0.4, 1.0);
+				gl.clearColor(0.2,0.2,0.4,1.0);
 				gl.clear(gl.COLOR_BUFFER_BIT);
 
 				//tell it to use our program (pair of shaders)
@@ -213,90 +215,223 @@
 				var offset = 0;
 				gl.vertexAttribPointer(positionAttributeLocation, size, type, normalize, stride, offset);
 
-				//draw the polygons
-				/*
-				drawPolygon({
-					path: path,
-					origin: [0,0],
-					pos: [100.0 * Math.cos(curTime),0],
-					scale: [1,1],
-					rot: Math.sin(curTime) * 3.14159,
-					color: [1.0,0.0,0.0,1.0]
-				});
 
-				drawPolygon({
-					path: path2,
-					origin: [0,0],
-					pos: [200,100],
-					scale: [1,1],
-					rot: 0,
-					color: [0.0,1.0,0.0,1.0]
-				});
-				*/
-
-				/* draw trees */
-				var treeColor = [0.0,1.0,0.0,1.0];
+				/* draw scene */
+				//var treeColor = [0.6,0.8,0.3,1.0, 0.2,0.6,0.4,1.0];
+				var treeColor = [0.2,0.6,0.4,1.0, 0.2,0.2,0.4,1.0];
 				//first row
 				drawPolygon({
 					path: treePath,
-					origin: [490,-480],
-					pos: [0,0],
+					pos: [-480,490],
+					origin: [0,0],
 					scale: [1,1],
 					rot: 0,
 					color: treeColor
 				});
 				drawPolygon({
 					path: treePath,
-					origin: [380,-450],
-					pos: [0,0],
+					pos: [-380,450],
+					origin: [0,0],
 					scale: [1,1],
 					rot: 0,
 					color: treeColor
 				});
 				drawPolygon({
 					path: treePath,
-					origin: [270,-570],
-					pos: [0,0],
+					pos: [-270,570],
+					origin: [0,0],
 					scale: [1,1],
 					rot: 0,
 					color: treeColor
 				});
 				drawPolygon({
 					path: treePath,
-					origin: [140,-450],
-					pos: [0,0],
+					pos: [-140,450],
+					origin: [0,0],
 					scale: [1,1],
 					rot: 0,
 					color: treeColor
 				});
 				drawPolygon({
 					path: treePath,
-					origin: [20,-480],
-					pos: [0,0],
+					pos: [-20,480],
+					origin: [0,0],
 					scale: [1,1],
 					rot: 0,
 					color: treeColor
 				});
 				drawPolygon({
 					path: treePath,
-					origin: [-100,-430],
-					pos: [0,0],
+					pos: [100,430],
+					origin: [0,0],
 					scale: [1,1],
 					rot: 0,
 					color: treeColor
 				});
 				drawPolygon({
 					path: treePath,
-					origin: [-300,-450],
-					pos: [0,0],
+					pos: [200,630],
+					origin: [0,0],
 					scale: [1,1],
 					rot: 0,
 					color: treeColor
 				});
 				drawPolygon({
 					path: treePath,
-					origin: [-420,-480],
-					pos: [0,0],
+					pos: [300,450],
+					origin: [0,0],
+					scale: [1,1],
+					rot: 0,
+					color: treeColor
+				});
+				drawPolygon({
+					path: treePath,
+					pos: [420,480],
+					origin: [0,0],
+					scale: [1,1],
+					rot: 0,
+					color: treeColor
+				});
+				//second row
+				drawPolygon({
+					path: treePath,
+					pos: [-440,280],
+					origin: [0,0],
+					scale: [1,1],
+					rot: 0,
+					color: treeColor
+				});
+				drawPolygon({
+					path: treePath,
+					pos: [-240,300],
+					origin: [0,0],
+					scale: [1,1],
+					rot: 0,
+					color: treeColor
+				});
+				drawPolygon({
+					path: treePath,
+					pos: [20,300],
+					origin: [0,0],
+					scale: [1,1],
+					rot: 0,
+					color: treeColor
+				});
+				drawPolygon({
+					path: treePath,
+					pos: [220,340],
+					origin: [0,0],
+					scale: [1,1],
+					rot: 0,
+					color: treeColor
+				});
+				drawPolygon({
+					path: treePath,
+					pos: [340,280],
+					origin: [0,0],
+					scale: [1,1],
+					rot: 0,
+					color: treeColor
+				});
+
+				//pond
+				drawPolygon({
+					path: pondPath,
+					origin: [0,0],
+					pos: [-350,40],
+					scale: [3,3],
+					rot: 0,
+					color: [0.2,0.6,1.0,1.0, 0.2,0.6,1.0,1.0] //no gradient
+				});
+
+				//bottom trees
+				//left side
+				drawPolygon({
+					path: treePath,
+					pos: [-520,80],
+					origin: [0,0],
+					scale: [1,1],
+					rot: 0,
+					color: treeColor
+				});
+				drawPolygon({
+					path: treePath,
+					pos: [-440,-100],
+					origin: [0,0],
+					scale: [1,1],
+					rot: 0,
+					color: treeColor
+				});
+				//right side
+				drawPolygon({
+					path: treePath,
+					pos: [320,80],
+					origin: [0,0],
+					scale: [1,1],
+					rot: 0,
+					color: treeColor
+				});
+				drawPolygon({
+					path: treePath,
+					pos: [400,0],
+					origin: [0,0],
+					scale: [1,1],
+					rot: 0,
+					color: treeColor
+				});
+				//bottom
+				drawPolygon({
+					path: treePath,
+					pos: [-460,-320],
+					origin: [0,0],
+					scale: [1,1],
+					rot: 0,
+					color: treeColor
+				});
+				drawPolygon({
+					path: treePath,
+					pos: [-340,-200],
+					origin: [0,0],
+					scale: [1,1],
+					rot: 0,
+					color: treeColor
+				});
+				drawPolygon({
+					path: treePath,
+					pos: [-140,-250],
+					origin: [0,0],
+					scale: [1,1],
+					rot: 0,
+					color: treeColor
+				});
+				drawPolygon({
+					path: treePath,
+					pos: [0,-420],
+					origin: [0,0],
+					scale: [1,1],
+					rot: 0,
+					color: treeColor
+				});
+				drawPolygon({
+					path: treePath,
+					pos: [140,-230],
+					origin: [0,0],
+					scale: [1,1],
+					rot: 0,
+					color: treeColor
+				});
+				drawPolygon({
+					path: treePath,
+					pos: [300,-200],
+					origin: [0,0],
+					scale: [1,1],
+					rot: 0,
+					color: treeColor
+				});
+				drawPolygon({
+					path: treePath,
+					pos: [440,-310],
+					origin: [0,0],
 					scale: [1,1],
 					rot: 0,
 					color: treeColor
@@ -384,7 +519,7 @@
 
 			uniform vec2 u_path[32];
 			uniform int u_pathLength;
-			uniform vec4 u_color;
+			uniform vec4 u_color[2];
 
 			varying vec2 localPos;
 
@@ -415,7 +550,7 @@
 				}
 
 				float inPoly = mod(crossCount,2.0); 
-				vec4 color = inPoly * u_color;
+				vec4 color = inPoly * (u_color[0] + (u_color[1]-u_color[0])*(localPos.y/-200.0));//(u_color + ( (vec4(0.0,0.0,0.0,1.0)-u_color)*(localPos.y/50.0) ));
 
 				gl_FragColor = color;
 
@@ -447,7 +582,18 @@
 </script>
 
 <script id="pond" type="figure">
-//TODO
+..3..................4..
+2......................5
+........................
+........................
+........................
+........................
+........................
+........................
+........................
+........................
+1......................6
+..0..................7..
 </script>
 
 		<style>
