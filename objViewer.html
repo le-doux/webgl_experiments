@@ -9,15 +9,18 @@
 			}
 		</style>
 		<script>
+		var gl;
+		var modelData;
+		var scale = 0.5;
 
 		function start() {
-			console.log("start");
+			//console.log("start");
 
 			var canvas = document.getElementById("glCanvas");
-			var gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+			gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
 
 			if (gl) {
-				console.log("got webgl context");
+				//console.log("got webgl context");
 
 				gl.canvas.width = 640;
 				gl.canvas.height = 640;
@@ -25,38 +28,29 @@
 				var vertShaderSrc = document.getElementById("vert").text;
 				var fragShaderSrc = document.getElementById("frag").text;
 
-				console.log("loaded shader sources");
-				console.log(vertShaderSrc);
+				//console.log("loaded shader sources");
+				//console.log(vertShaderSrc);
 
 				var vertShader = createShader(gl, gl.VERTEX_SHADER, vertShaderSrc);
 				var fragShader = createShader(gl, gl.FRAGMENT_SHADER, fragShaderSrc);
 
-				console.log("created shaders!");
+				//console.log("created shaders!");
 
 				var program = createProgram(gl, vertShader, fragShader);
 
-				console.log('created shader program!');
+				//console.log('created shader program!');
 
 				//get uniform locations
 				var matrixUniform = gl.getUniformLocation(program, "u_matrix");
 
 				var positionAttrib = gl.getAttribLocation(program, "a_position");
 
-				console.log("position attrib " + positionAttrib);
+				//console.log("position attrib " + positionAttrib);
 
 				var positionBuffer = gl.createBuffer();
 				gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
 				
-				// var positions = [ // quad that covers the whole screen
-				// 	0, 0,
-				// 	0, 1,
-				// 	1, 0,
-				// 	0, 1, 
-				// 	1, 0,
-				// 	1, 1
-				// ];
-
-				//cube
+				//load default cube
 				var vertices = [
 				  // Front face
 				  -1.0, -1.0,  1.0,
@@ -98,27 +92,29 @@
 				   1.0,  1.0,  1.0,
 				   1.0, -1.0,  1.0,
 				  
-				  // Left face
-				  -1.0, -1.0, -1.0,
-				  -1.0, -1.0,  1.0,
-				  -1.0,  1.0,  1.0,
-				  -1.0, -1.0, -1.0,
-				  -1.0,  1.0,  1.0,
+				  // Left face 
+				  -1.0, -1.0, -1.0, 
+				  -1.0, -1.0,  1.0, 
+				  -1.0,  1.0,  1.0, 
+				  -1.0, -1.0, -1.0, 
+				  -1.0,  1.0,  1.0, 
 				  -1.0,  1.0, -1.0
 				];
-				gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW); //note: look up static draw
+				loadModelData(gl,vertices);
 
-				console.log("buffer data loaded");
+				//console.log("buffer data loaded");
 
 				gl.enable(gl.DEPTH_TEST);
+				gl.depthFunc(gl.LEQUAL);
+
 				gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
 
-				console.log("viewport set");
+				//console.log("viewport set");
 
 				gl.clearColor(0,0,0,1);
 				gl.clear(gl.COLOR_BUFFER_BIT);
 
-				console.log("clear!");
+				//console.log("clear!");
 
 				gl.useProgram(program);
 				gl.enableVertexAttribArray(positionAttrib); // this tells gl which attribute to use for array methods
@@ -130,32 +126,32 @@
 				var offset = 0;
 				gl.vertexAttribPointer(positionAttrib, size, type, normalize, stride, offset);
 
-				console.log("use program and enable vertex attrib array");
+				//console.log("use program and enable vertex attrib array");
 
 				setInterval(function() {
-					gl.clearColor(0,0,0,1);
-					gl.clear(gl.COLOR_BUFFER_BIT);
+					// UPDATE
 
-					//set uniforms
+					// clear
+					gl.clearColor(0,0,0,1);
+					gl.clearDepth(1.0);
+
+					// calculate transform matrix
 					var t = Date.now();
-					// console.log(t);
 					var d = ((Math.sin( (t / 10000) * Math.PI * 2 )) + 1) / 2;
 					var angle = d * Math.PI * 2;
-					// console.log(d);
-					// console.log(angle);
-					// console.log("---");
 					var ca = Math.cos( angle );
 					var sa = Math.sin( angle );
-					var scale = 0.5;
+					// var scale = 0.5;
 					var matrix = [ca * scale,0,sa * scale,0, 0,1 * scale,0,0, -sa * scale,0,ca * scale,0, 0,0,0,1];
+
+					// set uniforms
 					gl.uniformMatrix4fv(matrixUniform, false, matrix);
 
+					// draw
 					var primitiveType = gl.TRIANGLES;
 					var offset = 0;
-					var count = 6 * 6;
+					var count = modelData.length / 3;
 					gl.drawArrays(primitiveType, offset, count);
-
-					// console.log("drawn!");
 
 				}, -1);
 			}
@@ -194,26 +190,122 @@
 				gl.deleteProgram(program);	
 			}
 		}
+
+		function loadModelData(gl,vertices) {
+			modelData = vertices;
+			gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(modelData), gl.STATIC_DRAW);
+		}
+
+		function loadObj(e) {
+			// load file chosen by user
+			var files = e.target.files;
+			var file = files[0];
+			var reader = new FileReader();
+			reader.readAsText( file );
+
+			reader.onloadend = function() {
+				var fileText = reader.result;
+				parseObj(fileText);
+			}
+		}
+
+		function parseObj(string) {
+			// file data
+			var lines = string.split("\n");
+
+			// geometry
+			var vertices = [];
+			var triangles = [];
+			
+			// store min and max vertex dimensions to calculate a display scale
+			var minDim = 0;
+			var maxDim = 0;
+
+			for (var i = 0; i < lines.length; i++) {
+				var l = lines[i];
+				var args = l.match(/\S+/g);
+				if(args == null)
+				{
+					// do nothing
+				}
+				else if(args[0] === "v") // vertex position
+				{
+					var v = [];
+					v.push( parseFloat(args[1]) );
+					v.push( parseFloat(args[2]) );
+					v.push( parseFloat(args[3]) );
+					vertices.push(v);
+
+					for(var j = 0; j < 3; j++) {
+						if(v[j] < minDim) minDim = v[j];
+						if(v[j] > maxDim) maxDim = v[j];
+					}
+				}
+				else if(args[0] === "f") // face
+				{
+					// first triangle
+					var v1 = parseInt( args[1].split("/")[0] ); // just get the vertex position; ignore texture and normal
+					var v2 = parseInt( args[2].split("/")[0] );
+					var v3 = parseInt( args[3].split("/")[0] );
+					var t0 = [];
+					t0.push( v1 );
+					t0.push( v2 );
+					t0.push( v3 );
+					triangles.push(t0);
+
+					if (args.length > 4) // this face is a quad, so add a 2nd triangle
+					{
+						// second triangle
+						var v4 = parseInt( args[4].split("/")[0] );
+						var t1 = [];
+						t1.push( v3 );
+						t1.push( v1 );
+						t1.push( v4 );
+						triangles.push(t1);
+					}
+				}
+			}
+
+			// expand triangles into array of vertices
+			var model = [];
+			for (var i = 0; i < triangles.length; i++) {
+				var t = triangles[i];
+				var v0 = vertices[ t[0]-1 ];
+				var v1 = vertices[ t[1]-1 ];
+				var v2 = vertices[ t[2]-1 ];
+				model.push( v0[0] ); model.push( v0[1] ); model.push( v0[2] );
+				model.push( v1[0] ); model.push( v1[1] ); model.push( v1[2] );
+				model.push( v2[0] ); model.push( v2[1] ); model.push( v2[2] );
+			}
+
+			// calculate display scale
+			scale = 1 / (maxDim - minDim);
+
+			loadModelData(gl,model);
+		}
+
 		</script>
 		<script id="vert" type="glsl">
 			attribute vec4 a_position;
 			uniform mat4 u_matrix;
-			varying vec4 vColor;
+			varying vec4 v_color;
 			void main() {
-				gl_Position = a_position * u_matrix; //* mat4(1,0,0,0, 0,1,0,0, 0,0,1,0, 0.5,0.5,0.5,1);
-				float d = 0.5 + (a_position.z + 0.5) * 0.4; //0.2 + ((a_position.z + 0.5) / 1.0) * 0.8;
-				vColor = vec4(d,d,d,1);
+				gl_Position = a_position * u_matrix;
+				float d = 1.0 - ( 0.1 + (gl_Position.z + 0.5) * 0.8 );
+				v_color = vec4(d,d,d,1);
 			}
 		</script>
 		<script id="frag" type="glsl">
 			precision mediump float;
-			varying vec4 vColor;
+			varying vec4 v_color;
 			void main() {
-				gl_FragColor = vColor;// vec4(1,0,0,1);
+				gl_FragColor = v_color;
 			}
 		</script>
 	</head>
 	<body onload="start();">
 		<canvas id="glCanvas"></canvas>
+		<br>
+		<input type="file" onchange="loadObj(event);"/>
 	</body>
 </html>
