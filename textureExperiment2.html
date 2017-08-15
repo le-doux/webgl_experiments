@@ -1,0 +1,227 @@
+<!DOCTYPE HTML>
+<html>
+	<head>
+		<style>
+			#glCanvas {
+				width: 1136px;
+				height: 640px;
+				background: black;
+			}
+		</style>
+		<script>
+		/*
+		IDEAS & QUESTIONS
+		- layers
+		- static background
+		- tiles
+		- pre-rendered animations
+		- can anything be dynamic?
+		- what is pre-render perf like?
+		- will it work on mobile?
+		- post processing effects?
+		- 2d lightmap?
+
+		NOTES
+		- texture coords are [0,1]
+		- gl_FragCoord are in pixels
+		- data format for RGB is weird (using RGBA instead)
+		*/
+
+		function start() {
+			console.log("start");
+
+			var canvas = document.getElementById("glCanvas");
+			var gl = canvas.getContext('webgl');
+
+			if (gl) {
+				console.log("got webgl context");
+
+				gl.canvas.width = 1136;
+				gl.canvas.height = 640;
+
+				var vertShaderSrc = document.getElementById("vert").text;
+				var fragShaderSrc = document.getElementById("frag").text;
+
+				console.log("loaded shader sources");
+				console.log(vertShaderSrc);
+
+				var vertShader = createShader(gl, gl.VERTEX_SHADER, vertShaderSrc);
+				var fragShader = createShader(gl, gl.FRAGMENT_SHADER, fragShaderSrc);
+
+				console.log("created shaders!");
+
+				var program = createProgram(gl, vertShader, fragShader);
+
+				console.log('created shader program!');
+
+				var positionAttrib = gl.getAttribLocation(program, "a_position");
+
+				console.log("position attrib " + positionAttrib);
+
+				var positionBuffer = gl.createBuffer();
+				gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+				var positions = [ // quad that covers the whole screen
+					-1, -1,
+					-1, 1,
+					1, -1,
+					-1, 1, 
+					1, -1,
+					1, 1
+				];
+				gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(positions), gl.STATIC_DRAW); //note: look up static draw
+
+				console.log("buffer data loaded");
+
+				gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
+
+				console.log("viewport set");
+
+				gl.clearColor(0,0,1,1);
+				gl.clear(gl.COLOR_BUFFER_BIT);
+
+				console.log("clear!");
+
+				gl.useProgram(program);
+				gl.enableVertexAttribArray(positionAttrib); // this tells gl which attribute to use for array methods
+				gl.bindBuffer(gl.ARRAY_BUFFER,positionBuffer); // don't really need to bind again (but would if had multiple buffers)
+				var size = 2;
+				var type = gl.FLOAT;
+				var normalize = false;
+				var stride = 0;
+				var offset = 0;
+				gl.vertexAttribPointer(positionAttrib, size, type, normalize, stride, offset);
+
+				console.log("use program and enable vertex attrib array");
+
+				var poly = [ 20,20, 100,200, 20,180, 20,20 ];
+
+				function pointInPolygon(point,polygon) {
+					var crossCount = 0;
+
+					var pX = point[0];
+					var pY = point[1] + 0.5; /* +0.5 avoids corner bug */
+
+					for(var i = 0; i < polygon.length; i+=2) {
+						var aX = polygon[i+0];
+						var aY = polygon[i+1];
+
+						var bX = polygon[i+2];
+						var bY = polygon[i+3];
+
+						var deltaY = (pY - aY) / (bY - aY);
+						var lineX = aX + ( (bX - aX) * deltaY );
+
+						var pInsideY = deltaY >= 0 && deltaY <= 1;
+						var pGreaterThanX = lineX <= pX;
+						var doesCrossLine = pInsideY && pGreaterThanX;
+
+						if(doesCrossLine) crossCount += 1;
+					}
+
+					return (crossCount % 2) == 1;
+				}
+
+				// -- texture stuff ---
+					// create texture
+					var randomPixels = [];
+					var width = 1136;
+					var height = 640;
+					for(var i = 0; i < height; i++) {
+						for(var j = 0; j < width; j++) {
+
+							if( pointInPolygon([j,i],poly) ) {
+								randomPixels.push( 255 );
+								randomPixels.push( 0 );
+								randomPixels.push( 0 );
+								randomPixels.push( 255 );
+							}
+							else {
+								randomPixels.push( Math.random() * 255 );
+								randomPixels.push( Math.random() * 255 );
+								randomPixels.push( Math.random() * 255 );
+								randomPixels.push( 255 );
+							}
+						}
+					}
+
+					var data = new Uint8Array(randomPixels); // new Uint8Array([255,0,0,255, 0,255,0,255, 0,0,255,255, 0,0,0,255]);
+					var texture = gl.createTexture();
+					gl.bindTexture(gl.TEXTURE_2D, texture);
+					// set parameters
+					gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+					gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+					gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+					gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+					// upload data into texture
+					gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA /*type*/, width /*width*/, height /*height*/, 0, gl.RGBA /*type*/, gl.UNSIGNED_BYTE, data);
+				// -- end texture stuff
+
+				setInterval( function() {
+					// console.log("update!");
+
+					gl.clearColor(0,0,1,1);
+					gl.clear(gl.COLOR_BUFFER_BIT);
+
+					// console.log("created texture");
+
+					var primitiveType = gl.TRIANGLES;
+					var offset = 0;
+					var count = 6;
+					gl.drawArrays(primitiveType, offset, count);
+				}, 10 );
+			}
+			else {
+				console.log("failed to get webgl context");
+			}
+		}
+
+		function createShader(gl, type, source) {
+			var shader = gl.createShader(type);
+			gl.shaderSource(shader, source);
+			gl.compileShader(shader);
+
+			var success = gl.getShaderParameter(shader, gl.COMPILE_STATUS);
+			if (success) {
+				return shader;
+			}
+			else {
+				console.log(gl.getShaderInfoLog(shader));
+				gl.deleteShader(shader);	
+			}
+		}
+
+		function createProgram(gl, vertexShader, fragmentShader) {
+			var program = gl.createProgram();
+			gl.attachShader(program, vertexShader);
+			gl.attachShader(program, fragmentShader);
+			gl.linkProgram(program);
+
+			var success = gl.getProgramParameter(program, gl.LINK_STATUS);
+			if (success) {
+				return program;
+			}
+			else {
+				console.log(gl.getProgramInfoLog(program));
+				gl.deleteProgram(program);	
+			}
+		}
+		</script>
+		<script id="vert" type="glsl">
+			attribute vec4 a_position;
+			void main() {
+				gl_Position = a_position;
+			}
+		</script>
+		<script id="frag" type="glsl">
+			precision mediump float;
+			uniform sampler2D u_image;
+			void main() {
+				vec2 texCoord = (gl_FragCoord.xy) / vec2(1136,640); // ok that was dumb but it got a texture on screen
+				gl_FragColor = texture2D(u_image,texCoord);
+			}
+		</script>
+	</head>
+	<body onload="start();">
+		<canvas id="glCanvas"></canvas>
+	</body>
+</html>

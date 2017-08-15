@@ -27,6 +27,8 @@
 		- data format for RGB is weird (using RGBA instead)
 		*/
 
+		var positionAttrib; //hack - need a way for this NOT to be global
+
 		function start() {
 			console.log("start");
 
@@ -54,7 +56,7 @@
 
 				console.log('created shader program!');
 
-				var positionAttrib = gl.getAttribLocation(program, "a_position");
+				positionAttrib = gl.getAttribLocation(program, "a_position");
 
 				console.log("position attrib " + positionAttrib);
 
@@ -71,6 +73,9 @@
 				// gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(positions), gl.STATIC_DRAW); //note: look up static draw
 
 				var quad = new QuadBuffer(gl, [ {x:-0.2,y:-0.2}, {x:-0.2,y:0.2}, {x:0.2,y:-0.2}, {x:0.2,y:0.2} ]);
+				console.log(quad.points);
+				var quad2 = new QuadBuffer(gl, [ {x:-1,y:-1}, {x:-1,y:-0.6}, {x:-0.6,y:-1}, {x:-0.6,y:-0.6} ]);
+				console.log(quad2.points);
 
 				console.log("buffer data loaded");
 
@@ -86,14 +91,18 @@
 				gl.useProgram(program);
 				gl.enableVertexAttribArray(positionAttrib); // this tells gl which attribute to use for array methods
 				// gl.bindBuffer(gl.ARRAY_BUFFER,positionBuffer); // don't really need to bind again (but would if had multiple buffers)
-				var size = 2;
-				var type = gl.FLOAT;
-				var normalize = false;
-				var stride = 0;
-				var offset = 0;
-				gl.vertexAttribPointer(positionAttrib, size, type, normalize, stride, offset);
+				
+				// var size = 2;
+				// var type = gl.FLOAT;
+				// var normalize = false;
+				// var stride = 0;
+				// var offset = 0;
+				// gl.vertexAttribPointer(positionAttrib, size, type, normalize, stride, offset);
 
 				console.log("use program and enable vertex attrib array");
+
+				// screen size
+				var screenUniform = gl.getUniformLocation(program, "u_screen");
 
 				setInterval( function() {
 					// console.log("update!");
@@ -106,6 +115,7 @@
 					// var count = 6;
 					// gl.drawArrays(primitiveType, offset, count);
 					quad.Draw();
+					quad2.Draw();
 				}, 10 );
 			}
 			else {
@@ -122,12 +132,20 @@
 
 			// load positions
 			var positionBuffer = gl.createBuffer();
+			console.log(positionBuffer);
 			gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
 			gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(positions), gl.STATIC_DRAW); //note: look up static draw
 
 
 			this.Draw = function() {
 				gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+
+				var size = 2;
+				var type = gl.FLOAT;
+				var normalize = false;
+				var stride = 0;
+				var offset = 0;
+				gl.vertexAttribPointer(positionAttrib, size, type, normalize, stride, offset);
 
 				var primitiveType = gl.TRIANGLES;
 				var offset = 0;
@@ -195,6 +213,7 @@
 		</script>
 		<script id="vert" type="glsl">
 			attribute vec4 a_position;
+			uniform vec2 u_screen;
 			void main() {
 				gl_Position = a_position;
 			}
