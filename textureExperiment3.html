@@ -1,13 +1,13 @@
 <!DOCTYPE HTML>
 <html>
 	<head>
-		<style>
+<!-- 		<style>
 			#glCanvas {
 				width: 1136px;
 				height: 640px;
 				background: black;
 			}
-		</style>
+		</style> -->
 		<script>
 		/*
 		IDEAS & QUESTIONS
@@ -25,10 +25,33 @@
 		- texture coords are [0,1]
 		- gl_FragCoord are in pixels
 		- data format for RGB is weird (using RGBA instead)
+
+		TODO
+		x texture in pixel values
+		- moveable quad position
+		x quad as an array
+		x moveable camera
+		x canvas fills the screen
+		x quad position from top left
+		- tiles: one big piece of geometry? or a bunch of quad buffers?
+		- canvas changes size on resize?
+
+		V0
+		- tiles
+		- sprites
+		- movement
+		- animated sprites
+		- palettes
+		- multiple colors per tile
 		*/
 
+		// GLOBAL shader junk
 		var positionAttrib; //hack - need a way for this NOT to be global
 		var texCoordAttrib;
+		var textureSizeUniform;
+		var cameraUniform;
+
+		var camera = { x:0, y:0 };
 
 		function start() {
 			console.log("start");
@@ -39,8 +62,8 @@
 			if (gl) {
 				console.log("got webgl context");
 
-				gl.canvas.width = 1136;
-				gl.canvas.height = 640;
+				gl.canvas.width = document.body.clientWidth;
+				gl.canvas.height = document.body.clientHeight;
 
 				// need this for transparency on sprites
 				gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
@@ -69,18 +92,6 @@
 
 				console.log("tex coord attrib " + texCoordAttrib);
 
-				// var positionBuffer = gl.createBuffer();
-				// gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
-				// var positions = [ // quad that covers the whole screen
-				// 	-1, -1, // 0
-				// 	-1, 1, // 1
-				// 	1, -1, // 2
-				// 	-1, 1, // 1
-				// 	1, -1, // 2
-				// 	1, 1 // 3
-				// ];
-				// gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(positions), gl.STATIC_DRAW); //note: look up static draw
-
 				var poly = [ 0,0, 100,50, 20,100, 0,0 ];
 				var texture = new Texture(gl, 100, 100);
 				drawPolygonOnTexture( poly, texture );
@@ -89,9 +100,9 @@
 				var texture2 = new Texture(gl, 100, 100);
 				drawPolygonOnTexture( poly2, texture2 );
 
-				var quad = new QuadBuffer(gl, [ {x:-200,y:-200}, {x:-200,y:200}, {x:200,y:-200}, {x:200,y:200} ], texture);
+				var quad = new QuadBuffer(gl, 0, 0, 100, 100, texture, 0, 0, 100, 100);
 				console.log(quad.points);
-				var quad2 = new QuadBuffer(gl, [ {x:-500,y:-100}, {x:-500,y:0}, {x:-400,y:-100}, {x:-400,y:0} ], texture2);
+				var quad2 = new QuadBuffer(gl, 200, 200, 400, 200, texture2, 0, 0, 100, 100);
 				console.log(quad2.points);
 
 				console.log("buffer data loaded");
@@ -106,15 +117,6 @@
 				console.log("clear!");
 
 				gl.useProgram(program);
-				// gl.enableVertexAttribArray(positionAttrib); // this tells gl which attribute to use for array methods
-				// gl.bindBuffer(gl.ARRAY_BUFFER,positionBuffer); // don't really need to bind again (but would if had multiple buffers)
-				
-				// var size = 2;
-				// var type = gl.FLOAT;
-				// var normalize = false;
-				// var stride = 0;
-				// var offset = 0;
-				// gl.vertexAttribPointer(positionAttrib, size, type, normalize, stride, offset);
 
 				console.log("use program and enable vertex attrib array");
 
@@ -122,31 +124,61 @@
 				var screenUniform = gl.getUniformLocation(program, "u_screen");
 				gl.uniform2f(screenUniform, gl.canvas.width, gl.canvas.height);
 
+				// texture size uniform
+				textureSizeUniform = gl.getUniformLocation(program, "u_texSize");
+
+				// camera uniform
+				cameraUniform = gl.getUniformLocation(program, "u_camera");
+
 				setInterval( function() {
-					// console.log("update!");
 
 					gl.clearColor(0,0,1,1);
 					gl.clear(gl.COLOR_BUFFER_BIT);
 
-					// var primitiveType = gl.TRIANGLES;
-					// var offset = 0;
-					// var count = 6;
-					// gl.drawArrays(primitiveType, offset, count);
+					// hack test camera motion	
+					// camera.x += 1;
+					// camera.y += 1;
+
+					gl.uniform2f(cameraUniform, camera.x, camera.y);
+
 					quad.Draw();
 					quad2.Draw();
 				}, 10 );
+
+				document.addEventListener("keydown", keydown);
 			}
 			else {
 				console.log("failed to get webgl context");
 			}
 		}
 
-		function QuadBuffer(gl, points, texture) {
-			this.points = points;
+		function keydown(e) {
+			console.log(e.code);
+			if(e.code === "ArrowUp") {
+				camera.y += 10;
+			}
+			else if(e.code === "ArrowDown") {
+				camera.y -= 10;
+			}
+			else if(e.code === "ArrowRight") {
+				camera.x += 10;
+			}
+			else if(e.code === "ArrowLeft") {
+				camera.x -= 10;
+			}
 
-			// convert quad into two triangles
-			var positions = [ points[0].x, points[0].y, points[1].x, points[1].y, points[2].x, points[2].y, 
-								points[1].x, points[1].y, points[2].x, points[2].y, points[3].x, points[3].y ];
+			// if(e.code === "Minus") {
+			// 	scale *= 0.5;
+			// }
+			// else if(e.code === "Equal") {
+			// 	scale *= 2.0;
+			// }
+		}
+
+		function QuadBuffer(gl, x, y, w, h, texture, tx, ty, tw, th) {
+			var points = [ x, y, x, y + h, x + w, y, x + w, y + h ];
+			var positions = [ points[0], points[1], points[2], points[3], points[4], points[5],
+								points[2], points[3], points[4], points[5], points[6], points[7] ];
 
 			// load positions
 			gl.enableVertexAttribArray( positionAttrib ); // this tells gl which attribute to use for array methods
@@ -155,23 +187,22 @@
 			gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
 			gl.bufferData(gl.ARRAY_BUFFER, new Float32Array( positions ), gl.STATIC_DRAW); //note: look up static draw
 
+			// what portion of the texture are we showing on this quad?
+			var txPoints = [ tx, ty, tx, ty + th, tx + tw, ty, tx + tw, ty + th ];
+			var txPositions = [ txPoints[0], txPoints[1], txPoints[2], txPoints[3], txPoints[4], txPoints[5],
+								txPoints[2], txPoints[3], txPoints[4], txPoints[5], txPoints[6], txPoints[7] ];
 
-			// hacky tex stuff
-			var texCoords = [ {x:0,y:0}, {x:0,y:1}, {x:1,y:0}, {x:1,y:1} ];
-			var texPositions = [ texCoords[0].x, texCoords[0].y, texCoords[1].x, texCoords[1].y, texCoords[2].x, texCoords[2].y, 
-								texCoords[1].x, texCoords[1].y, texCoords[2].x, texCoords[2].y, texCoords[3].x, texCoords[3].y ];
-
-			console.log(texPositions);
+			console.log(txPositions);
 
 			gl.enableVertexAttribArray( texCoordAttrib ); // this tells gl which attribute to use for array methods
 			var texCoordBuffer = gl.createBuffer();
 			gl.bindBuffer(gl.ARRAY_BUFFER, texCoordBuffer);
-			gl.bufferData(gl.ARRAY_BUFFER, new Float32Array( texPositions ), gl.STATIC_DRAW);
+			gl.bufferData(gl.ARRAY_BUFFER, new Float32Array( txPositions ), gl.STATIC_DRAW);
 
 			// textureStuff(gl); // test
 
 			this.Draw = function() {
-				texture.Bind();
+				texture.Bind(); // TODO -- should this be separate from quad buffer? tiles don't need it every time?
 
 				// position buffer
 				gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
@@ -243,48 +274,6 @@
 			texture.SetPixels(pixels);
 		}
 
-		function textureStuff(gl) {
-			var poly = [ 0,0, 100,50, 20,100, 0,0 ];
-
-			// -- texture stuff ---
-			// create texture
-			var randomPixels = [];
-			var width = 100;
-			var height = 100;
-			for(var i = 0; i < height; i++) {
-				for(var j = 0; j < width; j++) {
-
-					if( pointInPolygon([j,i],poly) ) {
-						randomPixels.push( 255 );
-						randomPixels.push( 0 );
-						randomPixels.push( 0 );
-						randomPixels.push( 255 );
-					}
-					else {
-						// randomPixels.push( Math.random() * 255 );
-						// randomPixels.push( Math.random() * 255 );
-						// randomPixels.push( Math.random() * 255 );
-						// randomPixels.push( 255 );
-						randomPixels.push( 0 );
-						randomPixels.push( 0 );
-						randomPixels.push( 0 );
-						randomPixels.push( 0 );
-					}
-				}
-			}
-
-			var data = new Uint8Array(randomPixels); // new Uint8Array([255,0,0,255, 0,255,0,255, 0,0,255,255, 0,0,0,255]);
-			var texture = gl.createTexture();
-			gl.bindTexture(gl.TEXTURE_2D, texture);
-			// set parameters
-			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-			// upload data into texture
-			gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA /*type*/, width /*width*/, height /*height*/, 0, gl.RGBA /*type*/, gl.UNSIGNED_BYTE, data);
-		}
-
 		function Texture( gl, width, height ) {
 			this.width = height;
 			this.height = height;
@@ -309,6 +298,8 @@
 
 			this.Bind = function() {
 				gl.bindTexture(gl.TEXTURE_2D, texId);
+				// console.log("BIND " + width + " " + height);
+				gl.uniform2f(textureSizeUniform, width, height); // TODO probably shouldn't do this so repetitively
 			}
 
 			this.ClearPixels();
@@ -346,13 +337,23 @@
 		}
 		</script>
 		<script id="vert" type="glsl">
-			attribute vec4 a_position;
-			attribute vec2 a_tex;
-			varying vec2 v_tex;
-			uniform vec2 u_screen;
+			attribute vec4 a_position; // vertex position
+			uniform vec2 u_screen; // screen size
+
+			attribute vec2 a_tex; // texture position in
+			uniform vec2 u_texSize; // total texture size
+			varying vec2 v_tex; // texture position out (normalized)
+
+			uniform vec2 u_camera; // camera position
 			void main() {
-				v_tex = a_tex;
-				gl_Position = vec4( a_position.x / u_screen.x, a_position.y / u_screen.y, a_position.z, a_position.w );
+				// convert texture from pixel-space to normalized-space
+				v_tex = vec2( a_tex.x / u_texSize.x, a_tex.y / u_texSize.y );
+
+				// top left corner version
+				// gl_Position = vec4( ( (a_position.x - u_camera.x) / u_screen.x ) - 1.0, -1.0 * ( ( (a_position.y - u_camera.y) / u_screen.y ) - 1.0 ), a_position.z, a_position.w );
+
+				// centered version
+				gl_Position = vec4( (a_position.x - u_camera.x) / u_screen.x, (a_position.y - u_camera.y) / u_screen.y, a_position.z, a_position.w );
 			}
 		</script>
 		<script id="frag" type="glsl">
@@ -360,12 +361,23 @@
 			varying vec2 v_tex;
 			uniform sampler2D u_image;
 			void main() {
-				// vec2 texCoord = (gl_FragCoord.xy) / vec2(1136,640); // ok that was dumb but it got a texture on screen
-				gl_FragColor = texture2D(u_image,v_tex);
-				// if(gl_FragColor <= 0) discard;
-				// gl_FragColor = vec4(v_tex.x, v_tex.y, 0, 1);
+				gl_FragColor = texture2D(u_image,v_tex); // DEBUG BLACK: + vec4(0,0,0,255);
 			}
 		</script>
+	
+		<style>
+			html, body {
+				width: 100%;
+				height: 100%;
+				margin: 0px;
+				padding: 0px;
+				overflow: hidden;
+			}
+/*			canvas {
+				width: 100%;
+				height: 100%;
+			}*/
+		</style>
 	</head>
 	<body onload="start();">
 		<canvas id="glCanvas"></canvas>
