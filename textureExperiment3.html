@@ -1,13 +1,15 @@
 <!DOCTYPE HTML>
 <html>
 	<head>
-<!-- 		<style>
+<!-- 		
+		<style>
 			#glCanvas {
 				width: 1136px;
 				height: 640px;
 				background: black;
 			}
-		</style> -->
+		</style>
+-->
 		<script>
 		/*
 		IDEAS & QUESTIONS
@@ -28,13 +30,15 @@
 
 		TODO
 		x texture in pixel values
-		- moveable quad position
+		x moveable quad position
 		x quad as an array
 		x moveable camera
 		x canvas fills the screen
 		x quad position from top left
 		- tiles: one big piece of geometry? or a bunch of quad buffers?
 		- canvas changes size on resize?
+		X draw multiple colors
+		- zoom?
 
 		V0
 		- tiles
@@ -50,8 +54,10 @@
 		var texCoordAttrib;
 		var textureSizeUniform;
 		var cameraUniform;
+		var positionUniform;
 
 		var camera = { x:0, y:0 };
+		var quad, quad2; // hack
 
 		function start() {
 			console.log("start");
@@ -94,15 +100,17 @@
 
 				var poly = [ 0,0, 100,50, 20,100, 0,0 ];
 				var texture = new Texture(gl, 100, 100);
-				drawPolygonOnTexture( poly, texture );
+				drawPolygonOnTexture( poly, [255,0,0,255], texture );
 
 				var poly2 = [33,0, 66,0, 100,33, 100,66, 66,100, 33,100, 0,66, 0,33, 33,0];
 				var texture2 = new Texture(gl, 100, 100);
-				drawPolygonOnTexture( poly2, texture2 );
+				drawPolygonOnTexture( poly2, [255,0,255,255], texture2 );
+				var poly3 = [0,0, 20,0, 0,20, 0,0];
+				drawPolygonOnTexture( poly3, [0,255,255,255], texture2 );
 
-				var quad = new QuadBuffer(gl, 0, 0, 100, 100, texture, 0, 0, 100, 100);
+				quad = new QuadBuffer(gl, 0, 0, 100, 100, texture, 0, 0, 100, 100);
 				console.log(quad.points);
-				var quad2 = new QuadBuffer(gl, 200, 200, 400, 200, texture2, 0, 0, 100, 100);
+				quad2 = new QuadBuffer(gl, 200, 200, 400, 200, texture2, 0, 0, 100, 100);
 				console.log(quad2.points);
 
 				console.log("buffer data loaded");
@@ -130,9 +138,12 @@
 				// camera uniform
 				cameraUniform = gl.getUniformLocation(program, "u_camera");
 
+				// quad position uniform
+				positionUniform = gl.getUniformLocation(program, "u_position");
+
 				setInterval( function() {
 
-					gl.clearColor(0,0,1,1);
+					gl.clearColor(0,0,0,1);
 					gl.clear(gl.COLOR_BUFFER_BIT);
 
 					// hack test camera motion	
@@ -155,16 +166,16 @@
 		function keydown(e) {
 			console.log(e.code);
 			if(e.code === "ArrowUp") {
-				camera.y += 10;
+				quad.y += 10;
 			}
 			else if(e.code === "ArrowDown") {
-				camera.y -= 10;
+				quad.y -= 10;
 			}
 			else if(e.code === "ArrowRight") {
-				camera.x += 10;
+				quad.x += 10;
 			}
 			else if(e.code === "ArrowLeft") {
-				camera.x -= 10;
+				quad.x -= 10;
 			}
 
 			// if(e.code === "Minus") {
@@ -175,6 +186,7 @@
 			// }
 		}
 
+		// TODO - this object has too much going on (separate it out?)
 		function QuadBuffer(gl, x, y, w, h, texture, tx, ty, tw, th) {
 			var points = [ x, y, x, y + h, x + w, y, x + w, y + h ];
 			var positions = [ points[0], points[1], points[2], points[3], points[4], points[5],
@@ -199,10 +211,14 @@
 			gl.bindBuffer(gl.ARRAY_BUFFER, texCoordBuffer);
 			gl.bufferData(gl.ARRAY_BUFFER, new Float32Array( txPositions ), gl.STATIC_DRAW);
 
-			// textureStuff(gl); // test
+			// hack: custom position offset test
+			this.x = 0;
+			this.y = 0;
 
 			this.Draw = function() {
 				texture.Bind(); // TODO -- should this be separate from quad buffer? tiles don't need it every time?
+
+				gl.uniform2f(positionUniform, this.x, this.y);
 
 				// position buffer
 				gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
@@ -258,16 +274,16 @@
 			return (crossCount % 2) == 1;
 		}
 
-		function drawPolygonOnTexture(polygon,texture) {
+		function drawPolygonOnTexture(polygon, color, texture) {
 			var pixels = texture.GetPixels();
 			for(var y = 0; y < texture.height; y++) {
 				for(var x = 0; x < texture.width; x++) {
 					if( pointInPolygon([x,y],polygon) ) {
 						var i = (y * texture.width * 4) + (x * 4);
-						pixels[ i+0 ] = 255; // r
-						pixels[ i+1 ] = 0;   // g
-						pixels[ i+2 ] = 0;   // b
-						pixels[ i+3 ] = 255; // a
+						pixels[ i+0 ] = color[0]; // r
+						pixels[ i+1 ] = color[1]; // g
+						pixels[ i+2 ] = color[2]; // b
+						pixels[ i+3 ] = color[3]; // a
 					}
 				}
 			}
@@ -345,15 +361,16 @@
 			varying vec2 v_tex; // texture position out (normalized)
 
 			uniform vec2 u_camera; // camera position
+			uniform vec2 u_position; // quad position
 			void main() {
 				// convert texture from pixel-space to normalized-space
-				v_tex = vec2( a_tex.x / u_texSize.x, a_tex.y / u_texSize.y );
+				v_tex = vec2( a_tex.x / u_texSize.x, 1.0 - (a_tex.y / u_texSize.y) );
 
 				// top left corner version
 				// gl_Position = vec4( ( (a_position.x - u_camera.x) / u_screen.x ) - 1.0, -1.0 * ( ( (a_position.y - u_camera.y) / u_screen.y ) - 1.0 ), a_position.z, a_position.w );
 
 				// centered version
-				gl_Position = vec4( (a_position.x - u_camera.x) / u_screen.x, (a_position.y - u_camera.y) / u_screen.y, a_position.z, a_position.w );
+				gl_Position = vec4( (a_position.x + u_position.x - u_camera.x) / u_screen.x, (a_position.y + u_position.y - u_camera.y) / u_screen.y, a_position.z, a_position.w );
 			}
 		</script>
 		<script id="frag" type="glsl">
@@ -373,10 +390,12 @@
 				padding: 0px;
 				overflow: hidden;
 			}
-/*			canvas {
+			/*
+			canvas {
 				width: 100%;
 				height: 100%;
-			}*/
+			}
+			*/
 		</style>
 	</head>
 	<body onload="start();">
